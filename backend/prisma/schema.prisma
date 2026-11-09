@@ -1,0 +1,219 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoleProjet {
+  MEMBRE
+  CHEF_PROJET
+}
+
+enum RoleUtilisateur {
+  USER
+  SUPER_ADMIN
+}
+
+enum StatutMembre {
+  ACTIF
+  INACTIF
+  REFUSE
+  QUITTE
+  EN_ATTENTE
+}
+
+enum StatutProjet {
+  PLANIFIE
+  EN_COURS
+  TERMINE
+  ARCHIVE
+}
+
+enum PrioriteTache {
+  BASSE
+  NORMALE
+  HAUTE
+  URGENTE
+}
+
+enum StatutTache {
+  A_FAIRE
+  EN_COURS
+  BLOQUEE
+  TERMINEE
+}
+
+model User {
+  id         Int    @id @default(autoincrement())
+  nom        String
+  prenom     String
+  email      String @unique
+  motDePasse String
+
+  role RoleUtilisateur @default(USER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  competences UserCompetence[]
+
+  membresProjets MembreProjet[]
+
+  tachesCreees Tache[] @relation("TachesCreees")
+
+  tachesAssignees Tache[] @relation("TachesAssignees")
+
+  projetsCrees Projet[] @relation("ProjetsCrees")
+}
+
+model UserCompetence {
+  id           Int @id @default(autoincrement())
+  userId       Int
+  competenceId Int
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competence Competence @relation(fields: [competenceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, competenceId])
+}
+
+model Projet {
+  id          Int     @id @default(autoincrement())
+  nom         String
+  description String?
+
+  dateDebut DateTime
+  dateFin   DateTime?
+
+  nombreMembresMax Int
+
+  statut StatutProjet @default(PLANIFIE)
+
+  createdById Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy User @relation("ProjetsCrees", fields: [createdById], references: [id])
+
+  membres     MembreProjet[]
+  competences ProjetCompetence[]
+  taches      Tache[]
+}
+
+model Competence {
+  id        Int      @id @default(autoincrement())
+  nom       String   @unique
+  createdAt DateTime @default(now())
+
+  utilisateurs  UserCompetence[]
+  projets       ProjetCompetence[]
+  membreProjets MembreProjet[]
+}
+
+model MembreProjet {
+  id Int @id @default(autoincrement())
+
+  userId       Int
+  projetId     Int
+  competenceId Int?
+
+  role   RoleProjet   @default(MEMBRE)
+  statut StatutMembre @default(EN_ATTENTE)
+
+  dateIntegration DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projet     Projet      @relation(fields: [projetId], references: [id], onDelete: Cascade)
+  competence Competence? @relation(fields: [competenceId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, projetId])
+}
+
+model ProjetCompetence {
+  id Int @id @default(autoincrement())
+
+  projetId     Int
+  competenceId Int
+
+  nombreMax Int
+
+  projet     Projet     @relation(fields: [projetId], references: [id], onDelete: Cascade)
+  competence Competence @relation(fields: [competenceId], references: [id], onDelete: Cascade)
+
+  @@unique([projetId, competenceId])
+}
+
+model Tache {
+  id          Int     @id @default(autoincrement())
+  titre       String
+  description String?
+
+  priorite PrioriteTache @default(NORMALE)
+  statut   StatutTache   @default(A_FAIRE)
+
+  dateDebut    DateTime?
+  dateEcheance DateTime?
+
+  projetId    Int
+  createdById Int
+  assigneeId  Int?
+
+  // Projet
+  projet Projet @relation(fields: [projetId], references: [id], onDelete: Cascade)
+
+  // Créateur
+  createdBy User @relation("TachesCreees", fields: [createdById], references: [id])
+
+  // Responsable
+  assignee User? @relation("TachesAssignees", fields: [assigneeId], references: [id])
+
+  // Sous-tâches
+  parentId Int?
+
+  parent     Tache?  @relation("SousTaches", fields: [parentId], references: [id], onDelete: Cascade)
+  sousTaches Tache[] @relation("SousTaches")
+
+  // Dépendances
+  dependances TacheDependance[] @relation("TachePrincipale")
+  dependantes TacheDependance[] @relation("TacheDependante")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projetId])
+  @@index([createdById])
+  @@index([assigneeId])
+  @@index([parentId])
+}
+
+model TacheDependance {
+  id           Int      @id @default(autoincrement())
+  tacheId      Int
+  dependanceId Int
+  tache        Tache    @relation("TachePrincipale", fields: [tacheId], references: [id], onDelete: Cascade)
+  dependance   Tache    @relation("TacheDependante", fields: [dependanceId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([tacheId, dependanceId])
+  @@index([tacheId])
+  @@index([dependanceId])
+}
+
+// voici le fonctionnement d'une application de gestion de projet que je doit concevoir et développer.
+
+// on aura deux vue :
+
+// 1. Un super admin, qui crée des projets, decris le projet, règles les options du projet (combien de membre au total , par profil, periode, le chef projet(après que des utilisateur ait integrer le projet)                                 ; une vue globale de l'évolution d'un projet. 
+// 2. une vue pour les utilisateurs, ils voient tous les projets crée, ils intègrent des projets, définis leur  compétence( développeur front/back; design, data ...)
+// 3. toujours dans la vue utilisateur , le chef projet désigné pourra assigner des tâches(un CRUD sur les tâches) a ses collaborateurs(les autre membre du projet), les utilisateurs pourrons faire un CRUD sur eux même leur propre tâches qu'il créer mais pas ceux crée par le chef projet.
+// 4. de même le chef projet a une vue global sur l'évolution de son projets, pareil pour les utilisateur, il voit l'évolution de leurs tâches, ceux de leur collègue.  
+// 5. en plus de tous ça il y a d'autre fonctionnalité  a implémenter notament:
+
+// COCHER LES TACHES TERMINER ET NOTIFIER LES AUTRE MEMBRE DU GROUPE             BLOQUER DES TACHES QUI PEUVENT PAS ETRE EFFECTUER AVANT LA FIN D'AUTRES;             LE AVERTIR CELUI QUI DOIS L'FEFECTUER DE L4IMPORTANCE DE TERMINER CETTE TACHES             L'EVOLUTION GLOBAL DU PROJET             APPELER LES WEBHOOK DE GITLAB LORSQU'UN MEMBRE DU GROUPE PUBLIE SON CODE,              PERMETTRE AU AUTRE DE VOIR LES MODIFICATION APPORTER             FAIRE UN RESUMER DE CE QUI A ETE FAIT SELON SON CE QU'IL A MIS DANS SON COMMIT             CHAT EQUIPE INTEGRER . analyse ceci avant qu'on passe a l'implémentation du backend avec Nest JS 

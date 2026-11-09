@@ -1,0 +1,24 @@
+# Dépendances Node.js
+node_modules/
+**/node_modules/
+
+# Variables d'environnement
+.env
+.env.*
+!.env.example
+
+# Builds
+.next/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Prisma
+**/generated/
